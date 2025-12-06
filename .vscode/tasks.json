@@ -1,0 +1,35 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: g++.exe сборка с miniaudio",
+            "command": "C:\\MinGW\\bin\\g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "-I", "${workspaceFolder}",
+                "-std=c++11",  // miniaudio требует C11/C++11
+                "-lm",         // математическая библиотека
+                "-lpthread",   // для потоков (нужно на Linux, но и в MinGW полезно)
+                "-ldsound",    // DirectSound (Windows)
+                "-lole32",     // COM (Windows)
+                "-lwinmm"      // Windows Multimedia
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Сборка с библиотекой miniaudio"
+        }
+    ],
+    "version": "2.0.0"
+}

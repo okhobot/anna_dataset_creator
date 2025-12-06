@@ -1,0 +1,14 @@
+cmake_minimum_required(VERSION 3.10)
+project(AudioCapture)
+
+find_package(portaudio REQUIRED)
+
+add_executable(audio_capture main.cpp)
+target_include_directories(audio_capture 
+    PRIVATE 
+        ${CMAKE_SOURCE_DIR}/portaudio/include
+)
+
+target_link_libraries(audio_capture PRIVATE portaudio)
+
+

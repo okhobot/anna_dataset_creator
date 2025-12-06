@@ -1,0 +1,4 @@
+[submodule "miniaudio"]
+	path = miniaudio
+	url = https://github.com/mackron/miniaudio
+	branch = master
