@@ -11,7 +11,11 @@
 #include <condition_variable>
 #include <atomic>
 
+#include <windows_capture_object.hpp>
+
 #include <Audio_controller.hpp>
+
+WCO wco;
 
 ma_result result;
 ma_device_config micro_device_config, system_device_config;
@@ -175,6 +179,28 @@ void audio_processing_thread()
 
 int main()
 {
+    POINT cursor_pos, old_cursor_pos;
+    int re = 2;
+    auto nya = wco.screenshot_mono(re);
+    GetCursorPos(&old_cursor_pos);
+    wco.set_cursor_pos(nya, cursor_pos, re, 2);
+    wco.SaveVectorToFile("img1.bmp", wco.cut_img_x(nya, 40, wco.get_width() / re, wco.get_height() / re), wco.get_width() / re - 40 * 2, wco.get_height() / re);
+    std::vector<float> data;
+    while (true)
+    {
+        GetCursorPos(&cursor_pos);
+        wco.get_keys(data, cursor_pos, old_cursor_pos);
+        if(data[21]+data[22]+data[23]+data[24]>0)
+        {
+for (auto &key : data)
+            std::cout<<fixed<<setprecision(1) << key << " ";
+        std::cout<< endl;
+        }
+        
+        old_cursor_pos = cursor_pos;
+    }
+        
+    return 0;
     init_audio_devices();
 
     // Инициализация устройства системного звука

@@ -7,7 +7,7 @@
                 "${workspaceFolder}/include"
             ],
             "defines": [
-                "_DEBUG",
+                "_RELEASE",
                 "UNICODE",
                 "_UNICODE"
             ],

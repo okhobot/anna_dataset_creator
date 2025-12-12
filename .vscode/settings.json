@@ -1,6 +1,13 @@
 {
   "cmake.buildDirectory": "${workspaceFolder}/cmake-build",
   "cmake.generator": "Ninja",
+  "cmake.buildType": "Release",
+  //"cmake.configureSettings": {
+  //  "CMAKE_BUILD_TYPE": "Release"
+  //},
+  //"cmake.configureArgs": [
+  //  "-DCMAKE_BUILD_TYPE=Release"
+  //],
   "files.associations": {
     "array": "cpp",
     "atomic": "cpp",

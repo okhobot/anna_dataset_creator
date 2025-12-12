@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(AudioCapture)
+project(WinCapture)
 
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -14,10 +14,10 @@ SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUT_DIR})
 # Добавляем исполняемый файл
 file(GLOB SOURCES "src/*.cpp")
 
-add_executable(AudioCapture ${SOURCES})
+add_executable(WinCapture ${SOURCES})
 
 # Включаем папку с заголовками
-target_include_directories(AudioCapture PRIVATE 
+target_include_directories(WinCapture PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/miniaudio
 )
@@ -26,7 +26,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE include)
 
 # Windows библиотеки для miniaudio
 if(WIN32)
-    target_link_libraries(AudioCapture 
+    target_link_libraries(WinCapture 
         dsound      # DirectSound
         ole32       # OLE
         winmm       # Windows Multimedia
@@ -38,6 +38,16 @@ if(WIN32)
     
     # Для поддержки расширенных возможностей Windows
     if(MSVC)
-        target_compile_options(AudioCapture PRIVATE /DWIN32_LEAN_AND_MEAN)
+        target_compile_options(WinCapture PRIVATE /DWIN32_LEAN_AND_MEAN)
+
+    # Используем статическую линковку Runtime библиотек
+    # set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    
+    # Или явно устанавливаем флаги
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /O3 /Ob2 /DNDEBUG")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT /O3 /Ob2 /DNDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
+
     endif()
 endif()
