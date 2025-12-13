@@ -38,6 +38,9 @@ class WCO
 public:
     WCO(int width = 1920, int height = 1080);
     ~WCO();
+
+    void reset(int width, int height);
+
     int get_width()
     {
         return im_width;

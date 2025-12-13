@@ -70,8 +70,8 @@ size_t safe_get_mic_size()
 void take_screenshot(std::vector<float> &win_frame)
 {
     win_frame = wco.screenshot_mono(screen_resolution);
-    wco.set_cursor_pos(win_frame, cursor_pos, screen_resolution, 1.5, 8 - screen_resolution);
-    wco.cut_img_x(win_frame, frame_cut_size, im_width / screen_resolution, im_height / screen_resolution);
+    wco.set_cursor_pos(win_frame, cursor_pos, screen_resolution, 1.5, (int)ceil(10.0 / screen_resolution));
+    win_frame = wco.cut_img_x(win_frame, frame_cut_size, im_width / screen_resolution, im_height / screen_resolution);
 }
 
 // Функция для обработки данных (дополнение нулями и удаление)
@@ -221,7 +221,7 @@ void audio_processing_thread()
 int main()
 {
 
-    int key_out_num;
+    int key_stop_num, key_start_num;
     {
         bool auto_new;
         std::string foo;
@@ -230,11 +230,14 @@ int main()
         f >> foo >> im_width;
         f >> foo >> im_height;
         f >> foo >> frame_cut_size;
-        f >> foo >> key_out_num;
+        f >> foo >> key_start_num;
+        f >> foo >> key_stop_num;
         f >> foo >> logs;
         f >> foo >> auto_new;
         f >> foo >> dataset_path;
         f.close();
+
+        wco.reset(im_width, im_height);
 
         if (auto_new)
         {
@@ -262,72 +265,83 @@ int main()
         std::cout << "; win_keys_count: " << tmp.size() << ";" << std::endl;
     }
 
-    init_audio_devices();
+    
 
-    // Инициализация устройства системного звука
-    result = ma_device_init(NULL, &system_device_config, &sys_device);
-    if (result != MA_SUCCESS)
+    while (true)
     {
-        std::cerr << "Error initializing system device: " << result << std::endl;
-        return -1;
-    }
+        while (GetAsyncKeyState(key_start_num) == 0)
+            std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    // Initialize microphone device
-    result = ma_device_init(NULL, &micro_device_config, &mic_device);
-    if (result != MA_SUCCESS)
-    {
-        std::cerr << "Error initializing microphone: " << result << std::endl;
-        ma_device_uninit(&sys_device);
-        return -1;
-    }
 
-    // Start audio capture
-    result = ma_device_start(&sys_device);
-    if (result != MA_SUCCESS)
-    {
-        std::cerr << "Error starting system device: " << result << std::endl;
-        ma_device_uninit(&sys_device);
-        ma_device_uninit(&mic_device);
-        return -1;
-    }
+        init_audio_devices();
+        keep_running=true;
 
-    result = ma_device_start(&mic_device);
-    if (result != MA_SUCCESS)
-    {
-        std::cerr << "Error starting microphone: " << result << std::endl;
+        // Инициализация устройства системного звука
+        result = ma_device_init(NULL, &system_device_config, &sys_device);
+        if (result != MA_SUCCESS)
+        {
+            std::cerr << "Error initializing system device: " << result << std::endl;
+            return -1;
+        }
+
+        // Initialize microphone device
+        result = ma_device_init(NULL, &micro_device_config, &mic_device);
+        if (result != MA_SUCCESS)
+        {
+            std::cerr << "Error initializing microphone: " << result << std::endl;
+            ma_device_uninit(&sys_device);
+            return -1;
+        }
+
+        // Start audio capture
+        result = ma_device_start(&sys_device);
+        if (result != MA_SUCCESS)
+        {
+            std::cerr << "Error starting system device: " << result << std::endl;
+            ma_device_uninit(&sys_device);
+            ma_device_uninit(&mic_device);
+            return -1;
+        }
+
+        result = ma_device_start(&mic_device);
+        if (result != MA_SUCCESS)
+        {
+            std::cerr << "Error starting microphone: " << result << std::endl;
+            ma_device_stop(&sys_device);
+            ma_device_uninit(&sys_device);
+            ma_device_uninit(&mic_device);
+            return -1;
+        }
+
+        std::cout << "Capture started" << std::endl;
+
+        // Запускаем поток обработки
+        std::thread processing_thread(audio_processing_thread);
+
+        // Ждем 5 секунд
+        // std::this_thread::sleep_for(std::chrono::seconds(5));
+        while (GetAsyncKeyState(key_stop_num) == 0)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            frames_count += delta_frames_count;
+            fps = delta_frames_count;
+            delta_frames_count = 0;
+        }
+
+        // Останавливаем обработку
+        keep_running = false;
+        processing_thread.join();
+
+        // Останавливаем захват и очищаем ресурсы
         ma_device_stop(&sys_device);
+        ma_device_stop(&mic_device);
         ma_device_uninit(&sys_device);
         ma_device_uninit(&mic_device);
-        return -1;
+
+        
+        std::cout << frames_count << " frames were taken" << std::endl;
+        frames_count=0;
     }
-
-    std::cout << "Capture started" << std::endl;
-
-    // Запускаем поток обработки
-    std::thread processing_thread(audio_processing_thread);
-
-    // Ждем 5 секунд
-    // std::this_thread::sleep_for(std::chrono::seconds(5));
-    while (GetAsyncKeyState(key_out_num) == 0)
-    {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        frames_count += delta_frames_count;
-        fps = delta_frames_count;
-        delta_frames_count = 0;
-    }
-
-    // Останавливаем обработку
-    keep_running = false;
-    processing_thread.join();
-
-    // Останавливаем захват и очищаем ресурсы
-    ma_device_stop(&sys_device);
-    ma_device_stop(&mic_device);
-    ma_device_uninit(&sys_device);
-    ma_device_uninit(&mic_device);
-
-    std::cout << frames_count << " frames were taken" << std::endl;
-
     // std::cout << "Захват завершен. Сохранение в WAV..." << std::endl;
 
     // Сохраняем данные в файлы (нужен мьютекс при чтении)

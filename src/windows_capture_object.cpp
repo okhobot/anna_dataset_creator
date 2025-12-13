@@ -23,7 +23,7 @@ void WCO::clean()
     }
 }
 
-void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_pos,int fps, const bool track_mouse)
+void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_pos, int fps, const bool track_mouse)
 {
 
     output.resize(25, 0);
@@ -43,10 +43,10 @@ void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_p
         // output[21]=(abs(cursor_pos.x-old_cursor_pos.x)<=sens)? 0.5: min(max((float)(cursor_pos.x-old_cursor_pos.x)/max_sens, (float)-1), (float)1)/2+0.5;//mx
         // output[22]=(abs(cursor_pos.y-old_cursor_pos.y)<=sens)? 0.5: min(max((float)(cursor_pos.y-old_cursor_pos.y)/max_sens, (float)-1), (float)1)/2+0.5;//my
 
-        output[21] = min(max((float)(cursor_pos.x - old_cursor_pos.x)*fps / max_sens, (float)0), (float)1); // mx
-        output[22] = min(max((float)(old_cursor_pos.x - cursor_pos.x)*fps / max_sens, (float)0), (float)1); // mx
-        output[23] = min(max((float)(cursor_pos.y - old_cursor_pos.y)*fps / max_sens, (float)0), (float)1); // my
-        output[24] = min(max((float)(old_cursor_pos.y - cursor_pos.y)*fps / max_sens, (float)0), (float)1); // my*/
+        output[21] = min(max((float)(cursor_pos.x - old_cursor_pos.x) * fps / max_sens, (float)0), (float)1); // mx
+        output[22] = min(max((float)(old_cursor_pos.x - cursor_pos.x) * fps / max_sens, (float)0), (float)1); // mx
+        output[23] = min(max((float)(cursor_pos.y - old_cursor_pos.y) * fps / max_sens, (float)0), (float)1); // my
+        output[24] = min(max((float)(old_cursor_pos.y - cursor_pos.y) * fps / max_sens, (float)0), (float)1); // my*/
 
         old_cursor_pos = cursor_pos;
     }
@@ -107,7 +107,7 @@ void WCO::set_cursor_pos(vector<float> &input, POINT &cursor_pos, const int scre
     for (int i = 0; i <= cursor_size; i++)
         for (int j = 0; j <= cursor_size; j++)
         {
-            if ((i == 0 )+ (j == 0) + (i == cursor_size) + (j == cursor_size)>=2)
+            if ((i == 0) + (j == 0) + (i == cursor_size) + (j == cursor_size) >= 2)
                 add_cursor_to_img(input, cursor_pos, screen_resolution, 0, i - cursor_size / 2, j - cursor_size / 2, shift);
             else
                 add_cursor_to_img(input, cursor_pos, screen_resolution, cursor_weight, i - cursor_size / 2, j - cursor_size / 2, shift);
@@ -127,7 +127,70 @@ WCO::WCO(int width, int height)
 
 WCO::~WCO()
 {
-    delete[] bits;
+    // Освобождаем выделенную память для битов экрана
+    if (bits != nullptr)
+    {
+        delete[] bits;
+        bits = nullptr;
+    }
+
+    // Освобождаем ресурсы GDI, если они были созданы
+    if (memDC != nullptr)
+    {
+        DeleteDC(memDC);
+        memDC = nullptr;
+    }
+
+    // Не освобождаем screenDC здесь, так как он получается через GetDC(0)
+    // и должен освобождаться через ReleaseDC в том же контексте
+
+    // Убедимся, что все объекты Bitmap удалены
+    if (memBm != nullptr)
+    {
+        DeleteObject(memBm);
+        memBm = nullptr;
+    }
+
+    // oldBm не нужно удалять отдельно, так как он был выбран в DC
+    // и будет удален вместе с удалением memBm
+}
+
+void WCO::reset(int width, int height)
+{
+    // Освобождаем выделенную память для битов экрана
+    if (bits != nullptr)
+    {
+        delete[] bits;
+        bits = nullptr;
+    }
+
+    // Освобождаем ресурсы GDI, если они были созданы
+    if (memDC != nullptr)
+    {
+        DeleteDC(memDC);
+        memDC = nullptr;
+    }
+
+    // Не освобождаем screenDC здесь, так как он получается через GetDC(0)
+    // и должен освобождаться через ReleaseDC в том же контексте
+
+    // Убедимся, что все объекты Bitmap удалены
+    if (memBm != nullptr)
+    {
+        DeleteObject(memBm);
+        memBm = nullptr;
+    }
+
+    // oldBm не нужно удалять отдельно, так как он был выбран в DC
+    // и будет удален вместе с удалением memBm
+
+    im_width = width;
+    im_height = height;
+    screen_linesize = ((im_width * 32 / 8 + 3) & ~3);
+    bits = new char[im_height * screen_linesize];
+
+    screenDC = GetDC(0);
+    memDC = CreateCompatibleDC(screenDC);
 }
 
 void WCO::LoadFromScreen(const int x, const int y, const int w, const int h)
