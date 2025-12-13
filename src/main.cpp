@@ -16,6 +16,15 @@
 #include <Audio_controller.hpp>
 
 WCO wco;
+POINT cursor_pos, old_cursor_pos;
+static const int N = 4096, audio_step = static_cast<int>(N * 0.35);
+Audio_controller ac(N, audio_step);
+
+std::string dataset_path, config_path = "config.txt";
+int screen_resolution, frame_cut_size;
+int im_width, im_height;
+unsigned int delta_frames_count = 0, fps = 1;
+unsigned long long frames_count = 0;
 
 ma_result result;
 ma_device_config micro_device_config, system_device_config;
@@ -24,13 +33,13 @@ ma_device mic_device, sys_device;
 // Мьютексы для безопасного доступа к данным
 std::mutex sys_data_mutex, mic_data_mutex;
 std::vector<float> mic_pcm_data, sys_pcm_data;
-std::vector<std::vector<float>> mic_spec, sys_spec;
+
+// std::vector<std::vector<float>> mic_spec, sys_spec;
 
 // Атомарные флаги для управления потоками
 std::atomic<bool> keep_running{true};
 
-static const int N = 4096, audio_step = static_cast<int>(N * 0.35);
-Audio_controller ac(N, audio_step);
+bool logs = false;
 
 // Функция для безопасного добавления данных
 void safe_add_system_data(const float *samples, ma_uint32 frameCount)
@@ -58,11 +67,18 @@ size_t safe_get_mic_size()
     return mic_pcm_data.size();
 }
 
+void take_screenshot(std::vector<float> &win_frame)
+{
+    win_frame = wco.screenshot_mono(screen_resolution);
+    wco.set_cursor_pos(win_frame, cursor_pos, screen_resolution, 1.5, 8 - screen_resolution);
+    wco.cut_img_x(win_frame, frame_cut_size, im_width / screen_resolution, im_height / screen_resolution);
+}
+
 // Функция для обработки данных (дополнение нулями и удаление)
 bool process_audio_chunks()
 {
     bool processed = false;
-    std::vector<std::vector<float>> tmp;
+    std::vector<float> sys_spec_frame, mic_spec_frame, win_frame, win_keys;
     int nsize = N + audio_step;
     if (sys_pcm_data.size() < nsize && mic_pcm_data.size() < nsize)
         return 0;
@@ -74,13 +90,14 @@ bool process_audio_chunks()
         {
             sys_pcm_data.insert(sys_pcm_data.begin(),
                                 nsize - sys_pcm_data.size(), 0.0f);
-            std::cout << sys_pcm_data.size() << std::endl;
+            // std::cout << sys_pcm_data.size() << std::endl;
         }
 
         // Здесь ваша обработка данных...
         // ac.process(sys_pcm_data.data(), N); // Пример
-        tmp = ac.amplitudes_to_spectrogram(sys_pcm_data);
-        sys_spec.insert(sys_spec.end(), tmp.begin(), tmp.end());
+        sys_spec_frame = ac.amplitudes_to_spectrogram(sys_pcm_data)[0];
+        // if(tmp.size()>1)std::cout<<"warinig: audio frames count: "<<tmp.size()<<std::endl;
+        // sys_spec.push_back(tmp[0]);
 
         // Удаляем обработанные данные
         if (sys_pcm_data.size() > audio_step)
@@ -103,9 +120,9 @@ bool process_audio_chunks()
 
         // Здесь ваша обработка данных...
         // ac.process(mic_pcm_data.data(), N); // Пример
-        tmp = ac.amplitudes_to_spectrogram(mic_pcm_data);
-        // std::cout<<tmp.size()<<std::endl;
-        mic_spec.insert(mic_spec.end(), tmp.begin(), tmp.end());
+        mic_spec_frame = ac.amplitudes_to_spectrogram(mic_pcm_data)[0];
+        // if(tmp.size()>1)std::cout<<"warinig: audio frames count: "<<tmp.size()<<std::endl;
+        // mic_spec.push_back(tmp[0]);
 
         if (mic_pcm_data.size() > audio_step)
         {
@@ -114,6 +131,30 @@ bool process_audio_chunks()
             processed = true;
         }
     }
+
+    GetCursorPos(&cursor_pos);
+    take_screenshot(win_frame);
+    wco.get_keys(win_keys, cursor_pos, old_cursor_pos, fps);
+
+    if (logs)
+    {
+        wco.SaveVectorToFile("img.bmp",win_frame,im_width/screen_resolution-2*frame_cut_size,im_height/screen_resolution);
+        std::cout << "fps: " << fps << "; ";
+        for (int i = 0; i < win_keys.size(); i++)
+            std::cout << win_keys[i] << " ";
+        std::cout << endl;
+    }
+
+    std::ofstream f(dataset_path, std::ios::binary | std::ios::app);
+    // sys_aud, mic_aud, win_frame, win_keys
+    f.write(reinterpret_cast<char *>(sys_spec_frame.data()), sys_spec_frame.size() * sizeof(float));
+    f.write(reinterpret_cast<char *>(mic_spec_frame.data()), mic_spec_frame.size() * sizeof(float));
+    f.write(reinterpret_cast<char *>(win_frame.data()), win_frame.size() * sizeof(float));
+    f.write(reinterpret_cast<char *>(win_keys.data()), win_keys.size() * sizeof(float));
+
+    f.close();
+
+    delta_frames_count++;
 
     return processed;
 }
@@ -163,7 +204,7 @@ void init_audio_devices()
 void audio_processing_thread()
 {
     const std::chrono::milliseconds processing_interval(10); // 10 мс
-
+    GetCursorPos(&old_cursor_pos);
     while (keep_running)
     {
         auto start_time = std::chrono::steady_clock::now();
@@ -179,52 +220,68 @@ void audio_processing_thread()
 
 int main()
 {
-    POINT cursor_pos, old_cursor_pos;
-    int re = 2;
-    auto nya = wco.screenshot_mono(re);
-    GetCursorPos(&old_cursor_pos);
-    wco.set_cursor_pos(nya, cursor_pos, re, 2);
-    wco.SaveVectorToFile("img1.bmp", wco.cut_img_x(nya, 40, wco.get_width() / re, wco.get_height() / re), wco.get_width() / re - 40 * 2, wco.get_height() / re);
-    std::vector<float> data;
-    while (true)
+
+    int key_out_num;
     {
-        GetCursorPos(&cursor_pos);
-        wco.get_keys(data, cursor_pos, old_cursor_pos);
-        if(data[21]+data[22]+data[23]+data[24]>0)
-        {
-for (auto &key : data)
-            std::cout<<fixed<<setprecision(1) << key << " ";
-        std::cout<< endl;
-        }
+        std::string foo;
+        ifstream f(config_path);
+        f >> foo >> screen_resolution;
+        f >> foo >> im_width;
+        f >> foo >> im_height;
+        f >> foo >> frame_cut_size;
+        f >> foo >> key_out_num;
+        f >> foo >> logs;
+        f >> foo >> dataset_path;
+        f.close();
+
+        f.open(config_path);
+        std::stringstream buffer;
+        buffer << f.rdbuf();
+        std::string content = buffer.str();
+        f.close();
+
+        int last_index=content.rfind('_');
+        std::ofstream of(config_path);
         
-        old_cursor_pos = cursor_pos;
+        of<<content.substr(0,last_index)+"_"+std::to_string(std::stoi(content.substr(last_index+1))+1);
+        of.close();
+
     }
-        
-    return 0;
+    {
+        std::vector<float> tmp;
+        GetCursorPos(&cursor_pos);
+
+        std::cout << "audio_size(N): " << N << "; audio_step: " << audio_step;
+        take_screenshot(tmp);
+        std::cout << "; win_frame_size: " << tmp.size();
+        wco.get_keys(tmp, cursor_pos, cursor_pos);
+        std::cout << "; win_keys_count: " << tmp.size() << ";" << std::endl;
+    }
+
     init_audio_devices();
 
     // Инициализация устройства системного звука
     result = ma_device_init(NULL, &system_device_config, &sys_device);
     if (result != MA_SUCCESS)
     {
-        std::cerr << "Ошибка инициализации системного устройства: " << result << std::endl;
+        std::cerr << "Error initializing system device: " << result << std::endl;
         return -1;
     }
 
-    // Инициализация устройства микрофона
+    // Initialize microphone device
     result = ma_device_init(NULL, &micro_device_config, &mic_device);
     if (result != MA_SUCCESS)
     {
-        std::cerr << "Ошибка инициализации микрофона: " << result << std::endl;
+        std::cerr << "Error initializing microphone: " << result << std::endl;
         ma_device_uninit(&sys_device);
         return -1;
     }
 
-    // Запуск захвата аудио
+    // Start audio capture
     result = ma_device_start(&sys_device);
     if (result != MA_SUCCESS)
     {
-        std::cerr << "Ошибка запуска системного устройства: " << result << std::endl;
+        std::cerr << "Error starting system device: " << result << std::endl;
         ma_device_uninit(&sys_device);
         ma_device_uninit(&mic_device);
         return -1;
@@ -233,20 +290,27 @@ for (auto &key : data)
     result = ma_device_start(&mic_device);
     if (result != MA_SUCCESS)
     {
-        std::cerr << "Ошибка запуска микрофона: " << result << std::endl;
+        std::cerr << "Error starting microphone: " << result << std::endl;
         ma_device_stop(&sys_device);
         ma_device_uninit(&sys_device);
         ma_device_uninit(&mic_device);
         return -1;
     }
 
-    std::cout << "Захват аудио начат. Обработка в течение 5 секунд..." << std::endl;
+    std::cout << "Capture started" << std::endl;
 
     // Запускаем поток обработки
     std::thread processing_thread(audio_processing_thread);
 
     // Ждем 5 секунд
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
+    while (GetAsyncKeyState(key_out_num) == 0)
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        frames_count += delta_frames_count;
+        fps = delta_frames_count;
+        delta_frames_count = 0;
+    }
 
     // Останавливаем обработку
     keep_running = false;
@@ -258,10 +322,12 @@ for (auto &key : data)
     ma_device_uninit(&sys_device);
     ma_device_uninit(&mic_device);
 
-    std::cout << "Захват завершен. Сохранение в WAV..." << std::endl;
+    std::cout << frames_count << " frames were taken" << std::endl;
+
+    // std::cout << "Захват завершен. Сохранение в WAV..." << std::endl;
 
     // Сохраняем данные в файлы (нужен мьютекс при чтении)
-    {
+    /*{
         for (int i = 0; i < sys_spec.size(); i++)
             sys_spec[i] = ac.recover_modules(sys_spec[i]);
         ac.writeWav("system_audio.wav", ac.griffinLimFromSpectrogram(sys_spec, 15));
@@ -275,7 +341,7 @@ for (auto &key : data)
 
     std::cout << "Готово. Размеры данных: системный - "
               << sys_pcm_data.size() << ", микрофон - "
-              << mic_pcm_data.size() << " сэмплов" << std::endl;
+              << mic_pcm_data.size() << " сэмплов" << std::endl;*/
 
     return 0;
 }

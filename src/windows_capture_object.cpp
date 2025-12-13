@@ -23,7 +23,7 @@ void WCO::clean()
     }
 }
 
-void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_pos, const bool track_mouse)
+void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_pos,int fps, const bool track_mouse)
 {
 
     output.resize(25, 0);
@@ -43,10 +43,10 @@ void WCO::get_keys(vector<float> &output, POINT &cursor_pos, POINT &old_cursor_p
         // output[21]=(abs(cursor_pos.x-old_cursor_pos.x)<=sens)? 0.5: min(max((float)(cursor_pos.x-old_cursor_pos.x)/max_sens, (float)-1), (float)1)/2+0.5;//mx
         // output[22]=(abs(cursor_pos.y-old_cursor_pos.y)<=sens)? 0.5: min(max((float)(cursor_pos.y-old_cursor_pos.y)/max_sens, (float)-1), (float)1)/2+0.5;//my
 
-        output[21] = min(max((float)(cursor_pos.x - old_cursor_pos.x) / max_sens, (float)0), (float)1); // mx
-        output[22] = min(max((float)(old_cursor_pos.x - cursor_pos.x) / max_sens, (float)0), (float)1); // mx
-        output[23] = min(max((float)(cursor_pos.y - old_cursor_pos.y) / max_sens, (float)0), (float)1); // my
-        output[24] = min(max((float)(old_cursor_pos.y - cursor_pos.y) / max_sens, (float)0), (float)1); // my*/
+        output[21] = min(max((float)(cursor_pos.x - old_cursor_pos.x)*fps / max_sens, (float)0), (float)1); // mx
+        output[22] = min(max((float)(old_cursor_pos.x - cursor_pos.x)*fps / max_sens, (float)0), (float)1); // mx
+        output[23] = min(max((float)(cursor_pos.y - old_cursor_pos.y)*fps / max_sens, (float)0), (float)1); // my
+        output[24] = min(max((float)(old_cursor_pos.y - cursor_pos.y)*fps / max_sens, (float)0), (float)1); // my*/
 
         old_cursor_pos = cursor_pos;
     }
@@ -99,17 +99,18 @@ void WCO::add_cursor_to_img(vector<float> &input, POINT &cursor_pos, const int s
         input[cursor_pos.x / screen_resolution + (cursor_pos.y / screen_resolution + y_shift) * im_width / screen_resolution + x_shift + shift] = cursor_weight;
 }
 
-void WCO::set_cursor_pos(vector<float> &input, POINT &cursor_pos, const int screen_resolution, const int cursor_weight, const int shift)
+void WCO::set_cursor_pos(vector<float> &input, POINT &cursor_pos, const int screen_resolution, const int cursor_weight, const int cursor_size, const int shift)
 {
-    if (cursor_pos.y >= im_height) //-50
+    if (cursor_pos.y >= im_height - cursor_size / 2 || cursor_pos.x >= im_width - cursor_size / 2) //-50
         return;
 
-    int size = 8;
-
-    for (int i = 0; i < size; i++)
-        for (int j = 0; j < size; j++)
+    for (int i = 0; i <= cursor_size; i++)
+        for (int j = 0; j <= cursor_size; j++)
         {
-            add_cursor_to_img(input, cursor_pos, screen_resolution, cursor_weight, i - size / 2, j - size / 2, shift);
+            if ((i == 0 )+ (j == 0) + (i == cursor_size) + (j == cursor_size)>=2)
+                add_cursor_to_img(input, cursor_pos, screen_resolution, 0, i - cursor_size / 2, j - cursor_size / 2, shift);
+            else
+                add_cursor_to_img(input, cursor_pos, screen_resolution, cursor_weight, i - cursor_size / 2, j - cursor_size / 2, shift);
         }
 }
 
@@ -420,11 +421,11 @@ void WCO::SaveVectorRGBToFile(const char *fileName, const std::vector<float> &da
     }
 }
 
-vector<float> WCO::cut_img_x(const vector<float> &data, int frame, int width, int height )
+vector<float> WCO::cut_img_x(const vector<float> &data, int frame, int width, int height)
 {
     vector<float> res((width - 2 * frame) * height);
     for (int i = 0; i < height; i++)
         for (int j = frame; j < width - frame; j++)
-            res[i * (width-2*frame) + (j - frame)] = data[i * width + j];
+            res[i * (width - 2 * frame) + (j - frame)] = data[i * width + j];
     return res;
 }
