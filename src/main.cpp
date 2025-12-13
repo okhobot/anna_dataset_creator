@@ -138,7 +138,7 @@ bool process_audio_chunks()
 
     if (logs)
     {
-        wco.SaveVectorToFile("img.bmp",win_frame,im_width/screen_resolution-2*frame_cut_size,im_height/screen_resolution);
+        wco.SaveVectorToFile("img.bmp", win_frame, im_width / screen_resolution - 2 * frame_cut_size, im_height / screen_resolution);
         std::cout << "fps: " << fps << "; ";
         for (int i = 0; i < win_keys.size(); i++)
             std::cout << win_keys[i] << " ";
@@ -223,6 +223,7 @@ int main()
 
     int key_out_num;
     {
+        bool auto_new;
         std::string foo;
         ifstream f(config_path);
         f >> foo >> screen_resolution;
@@ -231,21 +232,24 @@ int main()
         f >> foo >> frame_cut_size;
         f >> foo >> key_out_num;
         f >> foo >> logs;
+        f >> foo >> auto_new;
         f >> foo >> dataset_path;
         f.close();
 
-        f.open(config_path);
-        std::stringstream buffer;
-        buffer << f.rdbuf();
-        std::string content = buffer.str();
-        f.close();
+        if (auto_new)
+        {
+            f.open(config_path);
+            std::stringstream buffer;
+            buffer << f.rdbuf();
+            std::string content = buffer.str();
+            f.close();
 
-        int last_index=content.rfind('_');
-        std::ofstream of(config_path);
-        
-        of<<content.substr(0,last_index)+"_"+std::to_string(std::stoi(content.substr(last_index+1))+1);
-        of.close();
+            int last_index = content.rfind('_');
+            std::ofstream of(config_path);
 
+            of << content.substr(0, last_index) + "_" + std::to_string(std::stoi(content.substr(last_index + 1)) + 1);
+            of.close();
+        }
     }
     {
         std::vector<float> tmp;
